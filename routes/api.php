@@ -38,6 +38,27 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\PPAController;
 use App\Http\Controllers\LogController;
+use App\Http\Controllers\EstudianteController;
+use App\Http\Controllers\EdicionController;
+use App\Http\Controllers\TipoController;
+use App\Http\Controllers\ManifestacionController;
+use App\Http\Controllers\EdicionCursoController;
+use App\Http\Controllers\EstudianteManifestacionController;
+use App\Http\Controllers\GrupoController;
+use App\Http\Controllers\AnoGrupoController;
+use App\Http\Controllers\EstudianteGrupoController;
+use App\Http\Controllers\SectorEstrategicoController;
+use App\Http\Controllers\TDPPController;
+use App\Http\Controllers\EstudianteTDPPController;
+use App\Http\Controllers\GradoTituloController;
+use App\Http\Controllers\DecanoController;
+use App\Http\Controllers\JefeDepartamentoController;
+use App\Http\Controllers\MiembroDepartamentoController;
+use App\Http\Controllers\CoordinadorCarreraController;
+use App\Http\Controllers\ProfesorGuiaController;
+use App\Http\Controllers\AlumnoAyudanteController;
+use App\Http\Controllers\DocumentoController;
+
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
@@ -271,5 +292,87 @@ Route::get('/logs', [LogController::class, 'index']);
 
 Route::get('/export/ppa/pdf', [PPAController::class, 'exportPDF']);
 Route::get('/export/ppa/word', [PPAController::class, 'exportWord']);
-Route::get('/export/resolucion/pdf', [PPAController::class, 'exportResolucionPDF']);
-Route::get('/export/resolucion/word', [PPAController::class, 'exportResolucionWord']);
+Route::get('/export/resolucion/ppa/pdf', [PPAController::class, 'exportResolucionPDF']);
+Route::get('/export/resolucion/ppa/word', [PPAController::class, 'exportResolucionWord']);
+
+
+Route::get('/estudiante', [EstudianteController::class, 'index']);
+Route::post('/estudiante', [EstudianteController::class, 'store']);
+
+Route::apiResource('tipos', TipoController::class);
+
+Route::apiResource('ediciones', EdicionController::class);
+
+Route::apiResource('manifestaciones', ManifestacionController::class);
+
+Route::apiResource('edicion-curso', EdicionCursoController::class);
+
+Route::apiResource('estudiante-manifestacion', EstudianteManifestacionController::class);
+
+Route::apiResource('grupos', GrupoController::class);
+
+Route::apiResource('ano-grupo', AnoGrupoController::class);
+
+
+Route::apiResource('estudiante-grupo', EstudianteGrupoController::class);
+Route::apiResource('sector-estrategico', SectorEstrategicoController::class);
+Route::apiResource('td-pp', TDPPController::class);
+Route::apiResource('estudiante-tdpp', EstudianteTDPPController::class);
+Route::apiResource('grado-titulo', GradoTituloController::class);
+
+
+Route::apiResource('decano', DecanoController::class);
+
+// 🔥 extras
+Route::get('decano/actual/{facultad}', [DecanoController::class, 'actual']);
+Route::get('decano/historial/{facultad}', [DecanoController::class, 'historial']);
+
+Route::apiResource('jefe-departamento', JefeDepartamentoController::class);
+
+// 🔥 extras
+Route::get('jefe-departamento/actual/{departamento}', [JefeDepartamentoController::class, 'actual']);
+Route::get('jefe-departamento/historial/{departamento}', [JefeDepartamentoController::class, 'historial']);
+
+
+Route::apiResource('miembro-departamento', MiembroDepartamentoController::class);
+
+// extras
+Route::get('miembro-departamento/activos/{departamento}', [MiembroDepartamentoController::class, 'activos']);
+Route::get('miembro-departamento/historial/{profesor}', [MiembroDepartamentoController::class, 'historialProfesor']);
+
+
+Route::apiResource('coordinador-carrera', CoordinadorCarreraController::class);
+
+Route::get('coordinador-carrera/actual/{programa}', [CoordinadorCarreraController::class, 'actual']);
+Route::get('coordinador-carrera/historial/{programa}', [CoordinadorCarreraController::class, 'historial']);
+
+Route::apiResource('profesor-guia', ProfesorGuiaController::class);
+
+Route::get('profesor-guia/actual/{grupo}', [ProfesorGuiaController::class, 'actual']);
+Route::get('profesor-guia/historial/{grupo}', [ProfesorGuiaController::class, 'historial']);
+
+
+
+Route::get('alumno-ayudante', [AlumnoAyudanteController::class, 'index']);
+
+Route::post('alumno-ayudante/designar', [AlumnoAyudanteController::class, 'designar']);
+Route::post('alumno-ayudante/ratificar/{id}', [AlumnoAyudanteController::class, 'ratificar']);
+Route::post('alumno-ayudante/desnombrar/{id}', [AlumnoAyudanteController::class, 'desnombrar']);
+
+Route::get('alumno-ayudante/actual/{estudiante}', [AlumnoAyudanteController::class, 'actual']);
+Route::get('alumno-ayudante/historial/{estudiante}', [AlumnoAyudanteController::class, 'historial']);
+Route::get('alumno-ayudante/activos', [AlumnoAyudanteController::class, 'activos']);
+
+
+Route::get('/export/resolucion/aa/pdf', [AlumnoAyudanteController::class, 'aaPdf']);
+Route::get('/export/resolucion/aa/word', [AlumnoAyudanteController::class, 'aaWord']);
+Route::get('/export/aa/pdf', [AlumnoAyudanteController::class, 'exportPDF']);
+Route::get('/export/aa/word', [AlumnoAyudanteController::class, 'exportWord']);
+
+
+Route::get('/documentos', [DocumentoController::class, 'index']);
+Route::get('/cursos', [cursoController::class, 'index']);
+
+Route::post('/documentos/historial', [PPAController::class, 'historial']);
+Route::post('/documentos/historial-aa', [AlumnoAyudanteController::class, 'historialAA']);
+

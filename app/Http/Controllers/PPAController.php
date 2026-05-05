@@ -20,8 +20,10 @@ use Illuminate\Support\Facades\Response;
 use PhpOffice\PhpWord\Shared\Html;
 use Carbon\Carbon;
 use App\Models\Decano;
-
-
+use App\Models\Documento;
+use Illuminate\Support\Facades\Storage;
+use app\Models\Departamento;
+use app\Models\MiembroDepartamento;
 class PPAController extends Controller
 {
     // 🟢 DESIGNAR
@@ -297,15 +299,35 @@ $departamento = DB::table('departamento_prog_d_form')
         })
     );
 }
+
+
+
 public function exportPDF()
 {
     $data = $this->getPPAData();
 
     $pdf = Pdf::loadView('exports.ppa', ['data' => $data]);
 
-    return $pdf->download('ppa.pdf');
-}
+    // 🔥 nombre bonito
+    $fecha = now()->format('Y-m-d_H-i-s');
+    $nombreArchivo = "Listado_PPA_{$fecha}.pdf";
+    $ruta = "documentos/{$nombreArchivo}";
 
+    // 🔥 🔥 🔥 FIX CLAVE
+    Storage::disk('public')->put($ruta, $pdf->output());
+
+    // 🔥 guardar en BD
+    Documento::create([
+        'nombre' => "Listado PPA {$fecha}",
+        'tipo' => 'ppa',
+        'tipo_documento' => 'listado',
+        'periodo' => now()->year,
+        'ruta' => $ruta
+    ]);
+
+    // 🔥 descarga
+    return $pdf->download($nombreArchivo);
+}
 public function exportWord()
 {
     $data = $this->getPPAData();
@@ -313,19 +335,66 @@ public function exportWord()
     $phpWord = new PhpWord();
     $section = $phpWord->addSection();
 
-    $section->addText("Listado de PPA", ['bold' => true]);
+    // 🔹 Título
+    $section->addText(
+        'Listado de PPA',
+        ['name' => 'Arial', 'size' => 14, 'bold' => true]
+    );
+
+    // 🔹 Tabla
+    $table = $section->addTable([
+        'borderSize' => 6,
+        'borderColor' => '000000',
+        'cellMargin' => 50
+    ]);
+
+    // HEADER
+    $table->addRow();
+
+    $table->addCell(4000)->addText('Profesor', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+    $table->addCell(2000)->addText('Cat Docente', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+    $table->addCell(2000)->addText('Cat Científica', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+    $table->addCell(3000)->addText('Departamento', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+    $table->addCell(3000)->addText('Carrera', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+    $table->addCell(1500)->addText('Año', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
 
     foreach ($data as $item) {
-        $section->addText(
-            "{$item['nombre']} {$item['apellidos']} | {$item['carrera']} | {$item['anio']}"
+        $table->addRow();
+
+        $table->addCell(4000)->addText(
+            $item['nombre'].' '.$item['apellidos'],
+            ['name' => 'Arial', 'size' => 12]
         );
+
+        $table->addCell(2000)->addText($item['catDocente'], ['name' => 'Arial', 'size' => 12]);
+        $table->addCell(2000)->addText($item['catCientifica'], ['name' => 'Arial', 'size' => 12]);
+        $table->addCell(3000)->addText($item['departamento'], ['name' => 'Arial', 'size' => 12]);
+        $table->addCell(3000)->addText($item['carrera'], ['name' => 'Arial', 'size' => 12]);
+        $table->addCell(1500)->addText($item['anio'], ['name' => 'Arial', 'size' => 12]);
     }
 
-    $file = storage_path('app/ppa.docx');
+    // 🔥 nombre dinámico
+    $fecha = now()->format('Y-m-d_H-i-s');
+    $nombreArchivo = "Listado_PPA_{$fecha}.docx";
 
+    // 🔥 ruta física
+  $ruta = "documentos/{$nombreArchivo}";
+$file = storage_path("app/public/{$ruta}");
+
+    // 🔥 guardar archivo
     IOFactory::createWriter($phpWord, 'Word2007')->save($file);
 
-    return response()->download($file)->deleteFileAfterSend(true);
+    // 🔥 🔥 🔥 AQUI ESTA LO QUE TE FALTABA
+    \App\Models\Documento::create([
+        'nombre' => "Listado PPA {$fecha}",
+        'tipo' => 'ppa',
+        'tipo_documento' => 'listado',
+        'periodo' => now()->year,
+        'ruta' => "public/{$nombreArchivo}"
+    ]);
+
+    // 🔥 descarga normal (NO TOCAR)
+   return response()->download($file, $nombreArchivo);
 }
 private function getPPAData()
 {
@@ -454,28 +523,382 @@ public function exportResolucionPDF()
         'revolucion',
         'nombreDecano'
     ));
+$fechaTexto = $fecha->format('d-m-Y');
 
-    return $pdf->download('resolucion.pdf');
+// 🔥 nombre correcto
+$nombreArchivo = "Resolucion_PPA_{$fechaTexto}.pdf";
+
+// 🔥 asegurar carpeta
+$directorio = storage_path('app/public/documentos');
+if (!file_exists($directorio)) {
+    mkdir($directorio, 0777, true);
 }
+
+// 🔥 rutas
+$ruta = "documentos/{$nombreArchivo}";
+$rutaCompleta = storage_path("app/public/{$ruta}");
+
+// 🔥 guardar archivo
+file_put_contents($rutaCompleta, $pdf->output());
+
+// 🔥 guardar en BD
+\App\Models\Documento::create([
+    'nombre' => "Resolución PPA {$fechaTexto}",
+    'tipo' => 'ppa',
+    'tipo_documento' => 'resolucion',
+    'periodo' => $anio, // 👈 usa tu variable ya calculada
+    'ruta' => $ruta
+]);
+
+// 🔥 descargar
+return response()->download($rutaCompleta, $nombreArchivo);
+}
+
+
 public function exportResolucionWord()
 {
-    $data = $this->getDataResolucion();
+    Carbon::setLocale('es');
+    $fecha = Carbon::now();
 
+    $dia = $fecha->day;
+    $mes = $fecha->translatedFormat('F');
+    $anio = $fecha->year;
+    $revolucion = $anio - 1958;
+
+    // 🔹 DECANO
+    $decano = Decano::where('id_facultad', 1)->first();
+    $profesor = $decano ? Profesor::find($decano->id_profesor) : null;
+
+    $nombreDecano = $profesor
+        ? $profesor->nombre . ' ' . $profesor->apellidos
+        : '';
+
+    // 🔥 HISTORIAL
+    $historial = PpaHistorial::whereYear('fecha_accion', $anio)
+        ->with(['profesor.catDocente', 'profesor.catCientifica'])
+        ->get();
+
+    $ratificados = $historial->where('accion', 'ratificado');
+    $desnombrados = $historial->where('accion', 'desnombrado');
+    $designados = $historial->where('accion', 'designado');
+
+    // 🔥 MAPEAR (NO TOCAR)
+    $mapear = function ($items) {
+        return $items->map(function ($item) {
+
+            $anio = \App\Models\AnoAcademico::find($item->id_a_academico);
+            $carrera = $anio
+                ? \App\Models\ProgFormacion::find($anio->id_prog_form)
+                : null;
+
+            return [
+                'carrera' => $carrera->nombre ?? '',
+                'anio' => $anio->identificador ?? '',
+                'nombre' => $item->profesor->nombre . ' ' . $item->profesor->apellidos,
+                'catDocente' => $item->profesor->catDocente->nombre ?? '',
+                'catCientifica' => $item->profesor->catCientifica->nombre ?? '',
+            ];
+        });
+    };
+
+    $ratificados = $mapear($ratificados);
+    $desnombrados = $mapear($desnombrados);
+    $designados = $mapear($designados);
+
+    // 🔥 CREAR WORD
     $phpWord = new PhpWord();
-
-    // 🔥 IMPORTANTE: usar HTML
     $section = $phpWord->addSection();
 
-    $html = view('resolucion_word', compact('data'))->render();
+    // ============================
+    // ✅ HEADER BIEN HECHO (CLAVE)
+    // ============================
 
-    \PhpOffice\PhpWord\Shared\Html::addHtml($section, $html);
+    $table = $section->addTable();
 
-    $file = storage_path('resolucion.docx');
+    $table->addRow();
 
-    $writer = IOFactory::createWriter($phpWord, 'Word2007');
-    $writer->save($file);
+    // Logo izquierdo
+    $table->addCell(2000)->addImage(
+        public_path('images/logo_izq.png'),
+        ['width' => 60]
+    );
 
-    return response()->download($file)->deleteFileAfterSend();
+    // Texto central
+    $cellText = $table->addCell(8000, ['valign' => 'center']);
+
+$textrun = $cellText->addTextRun([
+    'alignment' => \PhpOffice\PhpWord\SimpleType\Jc::CENTER,
+    'spaceBefore' => 300 // 👈 ESTE es el que baja TODO el bloque
+]);
+    $cellText->addText(
+    'UNIVERSIDAD CENTRAL “MARTA ABREU” DE LAS VILLAS',
+    ['bold' => false, 'name' => 'Arial', 'size' => 10], // 👈 sin negrita + más pequeño
+    ['alignment' => \PhpOffice\PhpWord\SimpleType\Jc::CENTER]
+);
+
+    $cellText->addText(
+        'FACULTAD DE MATEMÁTICA, FÍSICA Y COMPUTACIÓN',
+        ['bold' => true, 'name' => 'Arial', 'size' => 10],
+        ['alignment' => \PhpOffice\PhpWord\SimpleType\Jc::CENTER]
+    );
+
+    // Logo derecho
+    $table->addCell(2000)->addImage(
+        public_path('images/logo_der.png'),
+        ['width' => 60]
+    );
+
+    // Línea
+
+
+    // ============================
+    // ✅ TU HTML (NO LO ROMPEMOS)
+    // ============================
+
+    $html = view('resolucion_word', compact(
+        'ratificados',
+        'desnombrados',
+        'designados',
+        'dia',
+        'mes',
+        'anio',
+        'revolucion',
+        'nombreDecano'
+    ))->render();
+
+    // limpiar etiquetas que rompen PhpWord
+    $html = preg_replace('/<!DOCTYPE.*?>/', '', $html);
+    $html = str_replace(['<html>', '</html>', '<body>', '</body>'], '', $html);
+
+   // ============================
+// PARTIR HTML
+// ============================
+
+$partes1 = explode('__TABLA_RATIFICADOS__', $html);
+
+// PRIMER BLOQUE (ANTES DE PRIMERO TABLA)
+Html::addHtml($section, $partes1[0], false, false);
+
+// ============================
+// TABLA RATIFICADOS
+// ============================
+
+$table = $section->addTable([
+    'borderSize' => 6,
+    'borderColor' => '000000',
+    'cellMargin' => 50
+]);
+
+$table->addRow();
+$table->addCell(3500)->addText('Carrera', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+$table->addCell(1200)->addText('Año', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+$table->addCell(5000)->addText('Nombre', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+$table->addCell(3500)->addText('Cat. Docente', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+$table->addCell(3500)->addText('Cat. Científica', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+
+foreach ($ratificados as $item) {
+    $table->addRow();
+
+    $table->addCell(3500)->addText($item['carrera'], ['name' => 'Arial', 'size' => 12]);
+    $table->addCell(1200)->addText($item['anio'], ['name' => 'Arial', 'size' => 12]);
+    $table->addCell(5000)->addText($item['nombre'], ['name' => 'Arial', 'size' => 12]);
+    $table->addCell(3500)->addText($item['catDocente'], ['name' => 'Arial', 'size' => 12]);
+    $table->addCell(3500)->addText($item['catCientifica'], ['name' => 'Arial', 'size' => 12]);
 }
 
+// ============================
+// SEGUNDA PARTE
+// ============================
+
+$partes2 = explode('__TABLA_DESNOMBRADOS__', $partes1[1]);
+
+Html::addHtml($section, $partes2[0]);
+
+// ============================
+// TABLA DESNOMBRADOS ✅
+// ============================
+
+$table = $section->addTable([
+    'borderSize' => 6,
+    'borderColor' => '000000',
+    'cellMargin' => 50
+]);
+
+$table->addRow();
+$table->addCell(3500)->addText('Carrera', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+$table->addCell(1200)->addText('Año', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+$table->addCell(5000)->addText('Nombre', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+$table->addCell(3500)->addText('Cat. Docente', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+$table->addCell(3500)->addText('Cat. Científica', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+
+foreach ($desnombrados as $item) {
+    $table->addRow();
+
+    $table->addCell(3500)->addText($item['carrera'], ['name' => 'Arial', 'size' => 12]);
+    $table->addCell(1200)->addText($item['anio'], ['name' => 'Arial', 'size' => 12]);
+    $table->addCell(5000)->addText($item['nombre'], ['name' => 'Arial', 'size' => 12]);
+    $table->addCell(3500)->addText($item['catDocente'], ['name' => 'Arial', 'size' => 12]);
+    $table->addCell(3500)->addText($item['catCientifica'], ['name' => 'Arial', 'size' => 12]);
+}
+
+$partes3 = explode('__TABLA_DESIGNADOS__', $partes2[1]);
+
+Html::addHtml($section, $partes3[0]);
+
+// ============================
+// TABLA DESIGNADOS
+// ============================
+
+$table = $section->addTable([
+    'borderSize' => 6,
+    'borderColor' => '000000',
+    'cellMargin' => 50
+]);
+
+$table->addRow();
+$table->addCell(3500)->addText('Carrera', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+$table->addCell(1200)->addText('Año', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+$table->addCell(5000)->addText('Nombre', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+$table->addCell(3500)->addText('Cat. Docente', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+$table->addCell(3500)->addText('Cat. Científica', ['bold' => true, 'name' => 'Arial', 'size' => 12]);
+
+foreach ($designados as $item) {
+    $table->addRow();
+
+    $table->addCell(3500)->addText($item['carrera'], ['name' => 'Arial', 'size' => 12]);
+    $table->addCell(1200)->addText($item['anio'], ['name' => 'Arial', 'size' => 12]);
+    $table->addCell(5000)->addText($item['nombre'], ['name' => 'Arial', 'size' => 12]);
+    $table->addCell(3500)->addText($item['catDocente'], ['name' => 'Arial', 'size' => 12]);
+    $table->addCell(3500)->addText($item['catCientifica'], ['name' => 'Arial', 'size' => 12]);
+}
+Html::addHtml($section, $partes3[1]);
+    // ============================
+    // DESCARGA
+    // ============================
+
+   // 🔥 nombre dinámico
+   $fecha = now();
+$fechaTexto = $fecha->format('d-m-Y');
+$nombreArchivo = "Resolucion_PPA_{$fechaTexto}.docx";
+
+// 🔥 asegurar carpeta
+$directorio = storage_path('app/public/documentos');
+if (!file_exists($directorio)) {
+    mkdir($directorio, 0777, true);
+}
+
+// 🔥 rutas
+$ruta = "documentos/{$nombreArchivo}";
+$rutaCompleta = storage_path("app/public/{$ruta}");
+
+// 🔥 guardar archivo
+$writer = IOFactory::createWriter($phpWord, 'Word2007');
+$writer->save($rutaCompleta);
+
+// 🔥 guardar en BD
+\App\Models\Documento::create([
+    'nombre' => "Resolución PPA {$anio}",
+    'tipo' => 'ppa',
+    'tipo_documento' => 'resolucion',
+    'periodo' => $anio,
+    'ruta' => $ruta
+]);
+
+// 🔥 descargar
+return response()->download($rutaCompleta, $nombreArchivo);
+}
+public function historial(Request $request)
+{
+    $desde = $request->desde;
+    $hasta = $request->hasta;
+
+    $historial = \App\Models\PpaHistorial::with([
+            'profesor.catDocente',
+            'profesor.catCientifica'
+        ])
+        ->whereIn('accion', ['designado', 'ratificado']) // 🔥 FIX
+        ->whereNotNull('fecha_accion')
+        ->whereYear('fecha_accion', '>=', $desde)
+        ->whereYear('fecha_accion', '<=', $hasta)
+        ->get()
+        ->unique(function ($item) {
+            return $item->id_profesor . '-' . date('Y', strtotime($item->fecha_accion)); // 🔥 FIX CLAVE
+        });
+
+    // 🔥 departamentos
+    $miembros = \App\Models\MiembroDepartamento::whereIn(
+        'id_profesor',
+        $historial->pluck('id_profesor')
+    )->get()->keyBy('id_profesor');
+
+    $departamentos = \App\Models\Departamento::whereIn(
+        'id',
+        $miembros->pluck('id_departamento')
+    )->get()->keyBy('id');
+
+    // 🔥 años y carreras (si quieres mantenerlos)
+    $anos = \App\Models\AnoAcademico::whereIn(
+        'id',
+        $historial->pluck('id_a_academico')
+    )->get()->keyBy('id');
+
+    $progForms = \App\Models\ProgFormacion::whereIn(
+        'id',
+        $anos->pluck('id_prog_form')
+    )->get()->keyBy('id');
+
+   $data = $historial->map(function ($item) use ($anos, $progForms, $miembros, $departamentos) {
+
+    $profesor = $item->profesor;
+    if (!$profesor) return null;
+
+    $anio = $anos[$item->id_a_academico] ?? null;
+    $carrera = $anio ? ($progForms[$anio->id_prog_form] ?? null) : null;
+
+    $miembro = $miembros[$item->id_profesor] ?? null;
+    $departamento = $miembro
+        ? ($departamentos[$miembro->id_departamento]->nombre ?? '')
+        : '';
+
+    return [
+        'nombre' => $profesor->nombre ?? '',
+        'apellidos' => $profesor->apellidos ?? '',
+        'catDocente' => optional($profesor->catDocente)->nombre ?? '',
+        'catCientifica' => optional($profesor->catCientifica)->nombre ?? '',
+        'departamento' => $departamento,
+        'carrera' => $carrera->nombre ?? '',
+        'anio_calendario' => date('Y', strtotime($item->fecha_accion)), // 🔥 año real
+        'anio_academico' => $anio->identificador ?? '' // 🔥 1ro, 2do
+    ];
+})->filter();
+
+
+    if ($data->isEmpty()) {
+        return response()->json(['error' => 'No hay datos'], 400);
+    }
+
+    $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView(
+        'exports.historial_ppa',
+        [
+            'data' => $data,
+            'desde' => $desde,
+            'hasta' => $hasta
+        ]
+    );
+
+    $nombreArchivo = "Historial_PPA_{$desde}_{$hasta}.pdf";
+    $ruta = "documentos/{$nombreArchivo}";
+
+    \Illuminate\Support\Facades\Storage::disk('public')->put($ruta, $pdf->output());
+
+    \App\Models\Documento::create([
+        'nombre' => "Historial PPA {$desde}-{$hasta}",
+        'tipo' => 'ppa',
+        'tipo_documento' => 'historial',
+        'periodo' => $hasta,
+        'ruta' => $ruta
+    ]);
+
+    return $pdf->download($nombreArchivo);
+}
 }

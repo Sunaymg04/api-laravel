@@ -7,18 +7,25 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
+use App\Models\Decano;
+use App\Models\Profesor;
+use App\Models\Facultad;
 
 class DecanoSeeder extends Seeder
 {
     public function run(): void
     {
-        DB::table('decano')->insert([
-            'uuid' => Str::uuid(),
-            'id_facultad' => 1,   // 👈 asegúrate que exista
-            'id_profesor' => 1,   // 👈 asegúrate que exista
-            'id_curso' => 27,      // 👈 asegúrate que exista
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+
+
+
+
+            Decano::create([
+                'id_facultad' => 1,
+                'id_profesor' => 1,
+                'fecha_inicio' => now()->subYear(),
+                'fecha_fin' => null,
+                'habilitado' => true
+            ]);
+        }
     }
-}
+
