@@ -12,4 +12,17 @@ abstract class Controller
 
         return is_numeric($value) ? (int) $value : null;
     }
+
+    protected function logDocumentGenerated(string $documento, $periodo = null): void
+    {
+        $usuario = request()->header('X-User', 'desconocido');
+        $detallePeriodo = $periodo ? " {$periodo}" : '';
+
+        LogController::registrar(
+            $usuario,
+            'generar_documento',
+            "{$usuario} generó {$documento}{$detallePeriodo}",
+            $this->documentFacultyId()
+        );
+    }
 }

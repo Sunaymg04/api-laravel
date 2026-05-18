@@ -10,6 +10,7 @@ class Log extends Model
    protected $fillable = [
     'usuario',
     'accion',
-    'descripcion'
+    'descripcion',
+    'facultad_id',
 ];
 }

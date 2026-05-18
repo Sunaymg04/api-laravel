@@ -325,6 +325,7 @@ public function exportPDF()
         'ruta' => $ruta,
         'facultad_id' => $this->documentFacultyId(),
     ]);
+    $this->logDocumentGenerated('Listado PPA', $fecha);
 
     // 🔥 descarga
     return $pdf->download($nombreArchivo);
@@ -394,6 +395,7 @@ $file = storage_path("app/public/{$ruta}");
         'ruta' => "public/{$nombreArchivo}",
         'facultad_id' => $this->documentFacultyId(),
     ]);
+    $this->logDocumentGenerated('Listado PPA', $fecha);
 
     // 🔥 descarga normal (NO TOCAR)
    return response()->download($file, $nombreArchivo);
@@ -552,6 +554,7 @@ file_put_contents($rutaCompleta, $pdf->output());
     'ruta' => $ruta,
     'facultad_id' => $this->documentFacultyId(),
 ]);
+$this->logDocumentGenerated('Resolución PPA', $fechaTexto);
 
 // 🔥 descargar
 return response()->download($rutaCompleta, $nombreArchivo);
@@ -807,6 +810,7 @@ $writer->save($rutaCompleta);
     'ruta' => $ruta,
     'facultad_id' => $this->documentFacultyId(),
 ]);
+$this->logDocumentGenerated('Resolución PPA', $anio);
 
 // 🔥 descargar
 return response()->download($rutaCompleta, $nombreArchivo);
@@ -903,6 +907,7 @@ public function historial(Request $request)
         'ruta' => $ruta,
         'facultad_id' => $this->documentFacultyId(),
     ]);
+    $this->logDocumentGenerated('Historial PPA', "{$desde}-{$hasta}");
 
     return $pdf->download($nombreArchivo);
 }

@@ -7,15 +7,20 @@ use Illuminate\Http\Request;
 
 class LogController extends Controller
 {
-    public static function registrar($usuario, $accion, $descripcion)
+    public static function registrar($usuario, $accion, $descripcion, $facultadId = null)
     {
         try {
             $usuario = app(ExternalUserService::class)->resolveLogUsername($usuario);
+            $facultadId = $facultadId
+                ?? request()->header('X-Facultad')
+                ?? request('facultad_id')
+                ?? request('id_facultad');
 
             Log::create([
                 'usuario' => $usuario,
                 'accion' => $accion,
-                'descripcion' => $descripcion
+                'descripcion' => $descripcion,
+                'facultad_id' => is_numeric($facultadId) ? (int) $facultadId : null,
             ]);
         } catch (\Exception $e) {
             // 🔥 NO romper flujo principal
@@ -33,10 +38,18 @@ public function index(Request $request)
         $query->where('usuario', $usuario);
     }
 
+    $facultadId = $request->query('facultad_id')
+        ?? $request->query('id_facultad')
+        ?? $request->header('X-Facultad');
+
+    if ($facultadId) {
+        $query->where('facultad_id', $facultadId);
+    }
+
     $logs = $query
         ->orderBy('created_at', 'desc')
         ->limit(10) // 🔥 siempre 10
-        ->get(['accion', 'descripcion', 'created_at']);
+        ->get(['accion', 'descripcion', 'facultad_id', 'created_at']);
 
     return response()->json($logs);
 }
