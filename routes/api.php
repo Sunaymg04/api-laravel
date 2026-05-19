@@ -58,10 +58,16 @@ use App\Http\Controllers\CoordinadorCarreraController;
 use App\Http\Controllers\ProfesorGuiaController;
 use App\Http\Controllers\AlumnoAyudanteController;
 use App\Http\Controllers\DocumentoController;
+use App\Http\Controllers\UserAccessController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
+
+Route::get('/users/{username}/access', [UserAccessController::class, 'userAccess']);
+Route::get('/access', [UserAccessController::class, 'index']);
+Route::post('/access/assign', [UserAccessController::class, 'assign']);
+Route::post('/access/admin/transfer', [UserAccessController::class, 'transferAdmin']);
 
 //Rutas provincia
 Route::get('/provincia', [provinciaController::class, 'index']);
@@ -375,4 +381,3 @@ Route::get('/cursos', [cursoController::class, 'index']);
 
 Route::post('/documentos/historial', [PPAController::class, 'historial']);
 Route::post('/documentos/historial-aa', [AlumnoAyudanteController::class, 'historialAA']);
-

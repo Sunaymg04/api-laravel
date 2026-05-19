@@ -29,6 +29,29 @@ class ExternalUserService
         return 'desconocido';
     }
 
+    public function usernameExists(?string $value): ?bool
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return false;
+        }
+
+        $users = $this->users();
+
+        if ($users === null) {
+            return null;
+        }
+
+        foreach ($users as $user) {
+            if (($user['username'] ?? null) === $value) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function users(): ?array
     {
         $baseUrl = rtrim((string) config('services.users_api.base_url'), '/');

@@ -47,4 +47,41 @@ class ExternalUserServiceTest extends TestCase
             app(ExternalUserService::class)->resolveLogUsername('usuario01')
         );
     }
+
+    public function test_it_validates_existing_external_username(): void
+    {
+        Http::fake([
+            'http://127.0.0.1:8001/api/users' => Http::response([
+                ['id' => 1, 'username' => 'usuario01'],
+            ]),
+        ]);
+
+        $this->assertTrue(
+            app(ExternalUserService::class)->usernameExists('usuario01')
+        );
+    }
+
+    public function test_it_rejects_missing_external_username(): void
+    {
+        Http::fake([
+            'http://127.0.0.1:8001/api/users' => Http::response([
+                ['id' => 1, 'username' => 'usuario01'],
+            ]),
+        ]);
+
+        $this->assertFalse(
+            app(ExternalUserService::class)->usernameExists('usuario99')
+        );
+    }
+
+    public function test_it_returns_null_when_external_user_api_is_unavailable(): void
+    {
+        Http::fake([
+            'http://127.0.0.1:8001/api/users' => Http::response([], 500),
+        ]);
+
+        $this->assertNull(
+            app(ExternalUserService::class)->usernameExists('usuario01')
+        );
+    }
 }

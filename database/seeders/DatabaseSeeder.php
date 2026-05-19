@@ -33,7 +33,7 @@ class DatabaseSeeder extends Seeder
         PlanEstudioSeeder::class,
         VersionSeeder::class,
         CohorteSeeder::class,
-        UserSeeder::class,
+        UserAppAccessSeeder::class,
         FacultadSeeder::class,
         DepartamentoSeeder::class,
         FacultadDepartamentoSeeder::class,
