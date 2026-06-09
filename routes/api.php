@@ -253,6 +253,7 @@ Route::post('/indicadorReg', [indicadorRegistroController::class, 'store']);
 //Rutas de Plan de Estudio
 Route::get('/plan_estudio',[PlanEstudioController::class, 'index']);
 Route::post('/plan_estudio', [PlanEstudioController::class, 'store']);
+Route::post('/plan_estudio/{id}/modificar', [PlanEstudioController::class, 'modificar']);
 Route::get('/plan_estudio/{id}', [PlanEstudioController::class, 'show']);
 Route::put('/plan_estudio/{id}', [PlanEstudioController::class, 'update']);
 Route::delete('/plan_estudio/{id}', [PlanEstudioController::class, 'destroy']);

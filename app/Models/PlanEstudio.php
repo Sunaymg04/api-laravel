@@ -14,7 +14,10 @@ class PlanEstudio extends Model
         'id_curso',
         'id_modalidad',
         'id_calificacion',
-        'nombre'
+        'nombre',
+        'estado',
+        'tipo_plan',
+        'plan_origen_id',
     ];
     protected $hidden = [
         'created_at',
@@ -54,6 +57,21 @@ class PlanEstudio extends Model
             'id_plan_estudio',
             'id_curriculo'
         );
+    }
+
+    public function planOrigen()
+    {
+        return $this->belongsTo(PlanEstudio::class, 'plan_origen_id');
+    }
+
+    public function modificacionesComoOrigen()
+    {
+        return $this->hasMany(Modificacion::class, 'plan_origen_id');
+    }
+
+    public function modificacion()
+    {
+        return $this->hasOne(Modificacion::class, 'plan_modificado_id');
     }
    
 }
