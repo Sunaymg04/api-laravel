@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\PlanEstudio;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Writer\Xls;
 
 class PlanEstudioExcelController extends Controller
 {
@@ -20,14 +22,12 @@ class PlanEstudioExcelController extends Controller
     public function download(string $id)
     {
         $data = $this->buildData((int) $id);
-        $html = $this->renderExcelHtml($data);
+        $path = $this->buildOfficialWorkbook($data);
         $filename = 'plan_estudio_' . $data['plan']['id'] . '.xls';
 
-        return response($html, 200, [
-            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-            'Cache-Control' => 'max-age=0',
-        ]);
+        return response()->download($path, $filename, [
+            'Content-Type' => 'application/vnd.ms-excel',
+        ])->deleteFileAfterSend(true);
     }
 
     private function buildData(int $id): array
@@ -117,6 +117,8 @@ class PlanEstudioExcelController extends Controller
             }
         }
 
+        $sections = $this->buildSections($rows);
+
         return [
             'plan' => [
                 'id' => $plan->id,
@@ -128,6 +130,7 @@ class PlanEstudioExcelController extends Controller
             ],
             'anios' => $anios,
             'rows' => $rows->values(),
+            'sections' => $sections,
             'totales' => [
                 'fondo_tiempo' => $rows->where('type', 'asignatura')->sum('fondo_tiempo'),
                 'horas_clase' => $rows->where('type', 'asignatura')->sum('horas_clase'),
@@ -137,6 +140,36 @@ class PlanEstudioExcelController extends Controller
                 'anios' => $this->sumarAnios($rows->where('type', 'asignatura'), $anios),
             ],
         ];
+    }
+
+    private function buildSections(Collection $rows): array
+    {
+        $sections = [
+            'base' => collect(),
+            'propio' => collect(),
+            'optativo' => collect(),
+        ];
+        $current = null;
+
+        foreach ($rows as $row) {
+            if ($row['type'] === 'curriculo') {
+                $name = mb_strtoupper($row['nombre']);
+                $current = match (true) {
+                    str_contains($name, 'BASE') => 'base',
+                    str_contains($name, 'PROPIO') => 'propio',
+                    str_contains($name, 'OPTATIVO') || str_contains($name, 'ELECTIVO') => 'optativo',
+                    default => null,
+                };
+
+                continue;
+            }
+
+            if ($current) {
+                $sections[$current]->push($row);
+            }
+        }
+
+        return $sections;
     }
 
     private function asignaturaPerteneceAlPrograma($asignatura, int $programaId): bool
@@ -179,88 +212,204 @@ class PlanEstudioExcelController extends Controller
         })->all();
     }
 
-    private function renderExcelHtml(array $data): string
+    private function buildOfficialWorkbook(array $data): string
     {
-        $columnCount = 8 + count($data['anios']);
-        $rows = collect($data['rows'])->map(fn ($row) => $this->renderRow($row, $data['anios']))->implode('');
-        $totals = $this->renderTotals($data);
+        $template = storage_path('app/templates/anexo_3_plan_proceso_docente.xls');
+        $spreadsheet = IOFactory::load($template);
+        $sheet = $spreadsheet->getSheet(0);
+        $anios = collect($data['anios'])->take(4)->values();
 
-        return '<html><head><meta charset="UTF-8">' . $this->excelStyles() . '</head><body>'
-            . '<table>'
-            . '<tr><th class="title" colspan="' . $columnCount . '">Plan del Proceso Docente</th></tr>'
-            . '<tr><td class="meta" colspan="' . $columnCount . '">Plan: ' . e($data['plan']['nombre']) . '</td></tr>'
-            . '<tr><td class="meta" colspan="' . $columnCount . '">Programa: ' . e($data['plan']['programa']) . ' | Curso: ' . e($data['plan']['curso']) . ' | Modalidad: ' . e($data['plan']['modalidad']) . '</td></tr>'
-            . $this->renderHeader($data['anios'])
-            . $rows
-            . $totals
-            . '</table></body></html>';
+        $this->fillHeader($sheet, $data);
+        $this->clearTemplateData($sheet);
+        $baseTotals = $this->fillBaseSection($sheet, collect($data['sections']['base']), $anios);
+        $propioTotals = $this->fillSimpleSection($sheet, collect($data['sections']['propio']), $anios, 88, 89, 97, 'CURRÍCULO PROPIO', 'P');
+        $optativoTotals = $this->fillSimpleSection($sheet, collect($data['sections']['optativo']), $anios, 101, 102, 108, 'CURRÍCULO OPTATIVO/ELECTIVO', 'O');
+
+        $this->writeTotals($sheet, 85, 'CURRÍCULO BASE', $baseTotals, $anios);
+        $this->writeTotals($sheet, 98, 'CURRÍCULO PROPIO', $propioTotals, $anios);
+        $this->writeTotals($sheet, 109, 'CURRÍCULO OPTATIVO/ELECTIVO', $optativoTotals, $anios);
+        $sheet->setCellValue('L75', 'CONTINÚA');
+        $sheet->setCellValue('B112', 'T O T A L E S');
+        $this->writeTotals($sheet, 113, 'CURRÍCULO', $this->mergeTotals([$baseTotals, $propioTotals, $optativoTotals], $anios), $anios);
+
+        $path = tempnam(sys_get_temp_dir(), 'plan_estudio_') . '.xls';
+        (new Xls($spreadsheet))->save($path);
+
+        return $path;
     }
 
-    private function renderHeader(Collection $anios): string
+    private function fillHeader($sheet, array $data): void
     {
-        $yearHeaders = $anios->map(fn ($anio) => '<th>' . e($anio['identificador']) . '</th>')->implode('');
-
-        return '<tr>'
-            . '<th>DISCIPLINA Y ASIGNATURA</th>'
-            . '<th>CANT. DE HORAS</th>'
-            . $yearHeaders
-            . '<th>TOTAL</th>'
-            . '<th>PRACT. LABORAL</th>'
-            . '<th>EXAMEN FINAL DE ASIGNAT.</th>'
-            . '<th>TRABAJO DE CURSO</th>'
-            . '<th>CLASE</th>'
-            . '</tr>';
+        $sheet->setCellValue('B5', 'MODALIDAD: ' . mb_strtoupper((string) ($data['plan']['modalidad'] ?? '')));
+        $sheet->setCellValue('B6', 'CARRERA: ' . mb_strtoupper((string) ($data['plan']['programa'] ?? '')));
+        $sheet->setCellValue('B7', 'CALIFICACIÓN: ' . mb_strtoupper((string) ($data['plan']['calificacion'] ?? '')));
+        $sheet->setCellValue('B8', 'VIGENTE A PARTIR DEL CURSO ESCOLAR ' . mb_strtoupper((string) ($data['plan']['curso'] ?? '')));
+        $sheet->setCellValue('B78', 'CARRERA: ' . mb_strtoupper((string) ($data['plan']['programa'] ?? '')) . '                         (CONTINUACIÓN PLAN DEL PROCESO DOCENTE)');
+        $sheet->setCellValue('B79', 'MODALIDAD: ' . mb_convert_case((string) ($data['plan']['modalidad'] ?? ''), MB_CASE_TITLE, 'UTF-8'));
     }
 
-    private function renderRow(array $row, Collection $anios): string
+    private function clearTemplateData($sheet): void
     {
-        $class = $row['type'];
-        $yearCells = $anios->map(fn ($anio) => '<td class="num">' . ((int) ($row['anios'][$anio['identificador']] ?? 0) ?: '') . '</td>')->implode('');
-
-        return '<tr class="' . $class . '">'
-            . '<td>' . e($row['nombre']) . '</td>'
-            . '<td class="num">' . ((int) $row['fondo_tiempo'] ?: '') . '</td>'
-            . $yearCells
-            . '<td class="num">' . ((int) $row['fondo_tiempo'] ?: '') . '</td>'
-            . '<td class="num">' . ((int) $row['horas_practica_laboral'] ?: '') . '</td>'
-            . '<td class="center">' . ($row['tiene_examen_final'] ? 'X' : '') . '</td>'
-            . '<td class="center">' . ($row['tiene_trabajo_curso'] ? 'X' : '') . '</td>'
-            . '<td class="num">' . ((int) $row['horas_clase'] ?: '') . '</td>'
-            . '</tr>';
+        foreach ([[14, 75], [85, 87], [88, 100], [101, 115]] as [$start, $end]) {
+            for ($row = $start; $row <= $end; $row++) {
+                foreach (range('B', 'L') as $column) {
+                    $sheet->setCellValue($column . $row, null);
+                }
+            }
+        }
     }
 
-    private function renderTotals(array $data): string
+    private function fillBaseSection($sheet, Collection $rows, Collection $anios): array
     {
-        $yearCells = collect($data['anios'])->map(function ($anio) use ($data) {
-            return '<td class="num">' . ((int) ($data['totales']['anios'][$anio['identificador']] ?? 0) ?: '') . '</td>';
-        })->implode('');
+        $sheet->setCellValue('B14', 'CURRÍCULO BASE');
+        $rowNumber = 15;
+        $disciplinaNumber = 0;
+        $asignaturaNumber = 0;
 
-        return '<tr class="total">'
-            . '<td>TOTAL DE HORAS DEL CURRICULO POR FORMAS Y ANOS</td>'
-            . '<td class="num">' . (int) $data['totales']['fondo_tiempo'] . '</td>'
-            . $yearCells
-            . '<td class="num">' . (int) $data['totales']['fondo_tiempo'] . '</td>'
-            . '<td class="num">' . (int) $data['totales']['horas_practica_laboral'] . '</td>'
-            . '<td class="num">' . (int) $data['totales']['examenes_finales'] . '</td>'
-            . '<td class="num">' . (int) $data['totales']['trabajos_curso'] . '</td>'
-            . '<td class="num">' . (int) $data['totales']['horas_clase'] . '</td>'
-            . '</tr>';
+        foreach ($rows as $row) {
+            if ($rowNumber > 74) {
+                break;
+            }
+
+            if ($row['type'] === 'disciplina') {
+                $disciplinaNumber++;
+                $asignaturaNumber = 0;
+                $this->writeAcademicRow($sheet, $rowNumber++, $disciplinaNumber, $row, $anios);
+                continue;
+            }
+
+            $asignaturaNumber++;
+            $this->writeAcademicRow($sheet, $rowNumber++, $disciplinaNumber . ',' . $asignaturaNumber, $row, $anios);
+        }
+
+        return $this->sectionTotals($rows, $anios);
     }
 
-    private function excelStyles(): string
+    private function fillSimpleSection($sheet, Collection $rows, Collection $anios, int $titleRow, int $startRow, int $endRow, string $title, string $prefix): array
     {
-        return '<style>
-            table { border-collapse: collapse; font-family: Arial, sans-serif; font-size: 11px; }
-            th, td { border: 1px solid #000; padding: 4px 6px; vertical-align: middle; }
-            th { background: #d9ead3; font-weight: bold; text-align: center; }
-            .title { background: #93c47d; font-size: 16px; text-align: center; }
-            .meta { font-weight: bold; background: #f3f6ef; }
-            .curriculo td { background: #b6d7a8; font-weight: bold; text-align: center; }
-            .disciplina td { background: #d9ead3; font-weight: bold; }
-            .asignatura td:first-child { padding-left: 24px; }
-            .total td { background: #ffe599; font-weight: bold; }
-            .num { text-align: right; }
-            .center { text-align: center; }
-        </style>';
+        $sheet->setCellValue('B' . $titleRow, $title);
+        $rowNumber = $startRow;
+        $counter = 0;
+
+        foreach ($rows as $row) {
+            if ($rowNumber > $endRow) {
+                break;
+            }
+
+            if ($row['type'] === 'disciplina') {
+                $this->writeAcademicRow($sheet, $rowNumber++, '', $row, $anios);
+                continue;
+            }
+
+            $counter++;
+            $codePrefix = $prefix;
+            if ($prefix === 'O' && str_contains(mb_strtoupper($row['nombre']), 'ELECTIVA')) {
+                $codePrefix = 'E';
+            }
+            $this->writeAcademicRow($sheet, $rowNumber++, $codePrefix . $counter, $row, $anios);
+        }
+
+        return $this->sectionTotals($rows, $anios);
+    }
+
+    private function writeAcademicRow($sheet, int $rowNumber, string|int $code, array $row, Collection $anios): void
+    {
+        $sheet->setCellValueExplicit(
+            'B' . $rowNumber,
+            (string) $code,
+            \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
+        );
+        $sheet->setCellValue('C' . $rowNumber, mb_strtoupper((string) $row['nombre']));
+        $sheet->setCellValue('D' . $rowNumber, (int) $row['fondo_tiempo'] ?: null);
+        $sheet->setCellValue('E' . $rowNumber, (int) $row['horas_clase'] ?: null);
+        $sheet->setCellValue('F' . $rowNumber, (int) $row['horas_practica_laboral'] ?: null);
+        $sheet->setCellValue('G' . $rowNumber, $row['tiene_examen_final'] ? 1 : null);
+        $sheet->setCellValue('H' . $rowNumber, $row['tiene_trabajo_curso'] ? 1 : null);
+        $this->writeYearValues($sheet, $rowNumber, $row['anios'] ?? [], $anios);
+        $sheet->getStyle('B' . $rowNumber . ':L' . $rowNumber)
+            ->getFont()
+            ->setBold($row['type'] === 'disciplina');
+    }
+
+    private function writeYearValues($sheet, int $rowNumber, array $values, Collection $anios): void
+    {
+        foreach (['I', 'J', 'K', 'L'] as $index => $column) {
+            $anio = $anios[$index]['identificador'] ?? null;
+            $value = $anio ? (int) ($values[$anio] ?? 0) : 0;
+            $sheet->setCellValue($column . $rowNumber, $value ?: null);
+        }
+    }
+
+    private function writeTotals($sheet, int $startRow, string $label, array $totals, Collection $anios): void
+    {
+        $sheet->setCellValue('B' . $startRow, 'TOTAL DE HORAS DEL ' . $label . ' POR FORMAS Y AÑOS');
+        $sheet->setCellValue('D' . $startRow, $totals['fondo_tiempo']);
+        $sheet->setCellValue('E' . $startRow, $totals['horas_clase']);
+        $sheet->setCellValue('F' . $startRow, $totals['horas_practica_laboral']);
+        $this->writeYearValues($sheet, $startRow, $totals['anios'], $anios);
+
+        $sheet->setCellValue('B' . ($startRow + 1), 'TOTAL DE EXÁMENES FINALES DEL ' . $label . ' POR AÑO');
+        $sheet->setCellValue('G' . ($startRow + 1), $totals['examenes_finales']);
+        $this->writeYearValues($sheet, $startRow + 1, $totals['examenes_por_anio'], $anios);
+
+        $sheet->setCellValue('B' . ($startRow + 2), 'TOTAL DE TRABAJOS DE CURSO DEL ' . $label . ' POR AÑO');
+        $sheet->setCellValue('H' . ($startRow + 2), $totals['trabajos_curso']);
+        $this->writeYearValues($sheet, $startRow + 2, $totals['trabajos_por_anio'], $anios);
+    }
+
+    private function sectionTotals(Collection $rows, Collection $anios): array
+    {
+        $asignaturas = $rows->where('type', 'asignatura');
+
+        return [
+            'fondo_tiempo' => $asignaturas->sum('fondo_tiempo'),
+            'horas_clase' => $asignaturas->sum('horas_clase'),
+            'horas_practica_laboral' => $asignaturas->sum('horas_practica_laboral'),
+            'examenes_finales' => $asignaturas->sum(fn ($row) => $row['tiene_examen_final'] ? 1 : 0),
+            'trabajos_curso' => $asignaturas->sum(fn ($row) => $row['tiene_trabajo_curso'] ? 1 : 0),
+            'anios' => $this->sumarAnios($asignaturas, $anios),
+            'examenes_por_anio' => $this->sumarEvaluacionesPorAnio($asignaturas, $anios, 'tiene_examen_final'),
+            'trabajos_por_anio' => $this->sumarEvaluacionesPorAnio($asignaturas, $anios, 'tiene_trabajo_curso'),
+        ];
+    }
+
+    private function sumarEvaluacionesPorAnio(Collection $rows, Collection $anios, string $field): array
+    {
+        return $anios->mapWithKeys(function ($anio) use ($rows, $field) {
+            $key = $anio['identificador'];
+
+            return [
+                $key => $rows->sum(fn ($row) => ($row[$field] ?? false) && (int) ($row['anios'][$key] ?? 0) > 0 ? 1 : 0),
+            ];
+        })->all();
+    }
+
+    private function mergeTotals(array $totalsList, Collection $anios): array
+    {
+        $emptyRows = collect();
+        $merged = [
+            'fondo_tiempo' => 0,
+            'horas_clase' => 0,
+            'horas_practica_laboral' => 0,
+            'examenes_finales' => 0,
+            'trabajos_curso' => 0,
+            'anios' => $this->sumarAnios($emptyRows, $anios),
+            'examenes_por_anio' => $this->sumarAnios($emptyRows, $anios),
+            'trabajos_por_anio' => $this->sumarAnios($emptyRows, $anios),
+        ];
+
+        foreach ($totalsList as $totals) {
+            foreach (['fondo_tiempo', 'horas_clase', 'horas_practica_laboral', 'examenes_finales', 'trabajos_curso'] as $key) {
+                $merged[$key] += (int) ($totals[$key] ?? 0);
+            }
+
+            foreach (['anios', 'examenes_por_anio', 'trabajos_por_anio'] as $group) {
+                foreach ($merged[$group] as $year => $value) {
+                    $merged[$group][$year] = $value + (int) ($totals[$group][$year] ?? 0);
+                }
+            }
+        }
+
+        return $merged;
     }
 }
