@@ -13,7 +13,6 @@ Tecnologias principales:
 - Composer
 - MySQL o MariaDB recomendado
 - SQLite opcional para pruebas locales simples
-- Node.js y npm solo son opcionales si se quieren compilar recursos de Vite; no hacen falta para probar la API
 - Laravel Sanctum instalado como dependencia
 
 ## 2. Requisitos antes de empezar
@@ -58,8 +57,6 @@ Para verificar Composer:
 ```bash
 composer --version
 ```
-
-Node.js y npm no son obligatorios para esta API. Si solo se va a levantar el backend y probar endpoints en Postman, se pueden ignorar.
 
 ## 3. Instalacion de requisitos por sistema operativo
 
@@ -204,7 +201,6 @@ Cuando ya estan instaladas las herramientas principales, hay que trabajar dentro
 artisan
 composer.json
 composer.lock
-package.json
 .env.example
 routes/
 app/
@@ -231,7 +227,6 @@ Debe aparecer algo parecido a:
 ```txt
 artisan
 composer.json
-package.json
 ```
 
 Tambien puedes entrar manualmente:
@@ -252,7 +247,6 @@ Debe aparecer:
 ```txt
 artisan
 composer.json
-package.json
 ```
 
 ### 5.2. Verificar que las herramientas se reconocen
@@ -550,6 +544,15 @@ Si van a probar login, esa otra API debe estar levantada en esa direccion.
 
 Si no tienen esa API externa encendida, esta API igual puede levantar y muchos endpoints pueden responder, pero el login puede devolver `503`.
 
+La API externa debe responder a estas rutas:
+
+```txt
+POST /api/users/validate
+GET  /api/users
+```
+
+Si esa API externa no esta levantada o la URL esta mal, el login de esta API respondera con error `503`.
+
 ### 5.11. Configuracion final recomendada del `.env`
 
 Para Windows con XAMPP, una configuracion local tipica seria:
@@ -709,159 +712,7 @@ php artisan serve
 
 Recordatorio: antes de `php artisan migrate:fresh --seed`, ya debe existir la base de datos `api_academica` y el `.env` debe tener bien los datos de conexion.
 
-## 6. Detalle de la API externa de usuarios
-
-El login de este proyecto no valida usuarios directamente en esta base de datos. Usa un servicio externo configurado con:
-
-```env
-USERS_API_URL=http://127.0.0.1:8001/api
-```
-
-La API externa debe responder:
-
-- `POST /api/users/validate`
-- `GET /api/users`
-
-El endpoint de validacion debe aceptar:
-
-```json
-{
-  "username": "usuario01",
-  "password": "contrasena"
-}
-```
-
-Y debe devolver algo parecido a:
-
-```json
-{
-  "valid": true,
-  "user": {
-    "username": "usuario01"
-  }
-}
-```
-
-Si esa API externa no esta levantada o la URL esta mal, el login de esta API respondera con error `503` y el mensaje:
-
-```json
-{
-  "message": "No se pudo validar el usuario en la API de usuarios."
-}
-```
-
-Para probar el resto de endpoints que no dependan de login, se puede levantar esta API sin el servicio externo. Para probar login completo, hay que levantar tambien la API de usuarios o configurar `USERS_API_URL` con la direccion correcta.
-
-## 7. Ejecutar migraciones
-
-Con la base de datos ya creada y el `.env` configurado:
-
-```bash
-php artisan migrate
-```
-
-Si es una instalacion desde cero y se quiere reiniciar todo:
-
-```bash
-php artisan migrate:fresh
-```
-
-Advertencia: `migrate:fresh` borra todas las tablas de la base de datos configurada. Usarlo solo en desarrollo o en una base de datos de prueba.
-
-## 8. Cargar datos iniciales
-
-Para insertar datos de prueba y catalogos:
-
-```bash
-php artisan db:seed
-```
-
-Para reiniciar base de datos y cargar seeders en una instalacion nueva:
-
-```bash
-php artisan migrate:fresh --seed
-```
-
-Este proyecto tiene seeders para programas de formacion, anos academicos, provincias, asignaturas, cursos, modalidades, calificaciones, usuarios/accesos, facultades, departamentos, estudiantes, profesores, PPA, TDPP, grupos, sectores estrategicos y otros catalogos.
-
-## 9. Crear enlace de almacenamiento
-
-El proyecto genera y guarda documentos/logos en `storage`. Crear el enlace publico:
-
-```bash
-php artisan storage:link
-```
-
-Si el comando dice que el enlace ya existe, no pasa nada.
-
-## 10. Limpiar y reconstruir cache
-
-Despues de cambiar `.env` o configuraciones:
-
-```bash
-php artisan optimize:clear
-php artisan config:clear
-php artisan route:clear
-php artisan cache:clear
-```
-
-Luego:
-
-```bash
-php artisan config:cache
-```
-
-En desarrollo, si se cambian variables muchas veces, se puede trabajar sin `config:cache`.
-
-## 11. Levantar el servidor de la API
-
-Desde la raiz del proyecto:
-
-```bash
-php artisan serve
-```
-
-Por defecto queda en:
-
-```txt
-http://127.0.0.1:8000
-```
-
-Si el puerto 8000 esta ocupado:
-
-```bash
-php artisan serve --port=8002
-```
-
-La base de la API sera:
-
-```txt
-http://127.0.0.1:8000/api
-```
-
-## 12. Probar que la API responde
-
-Abrir en navegador:
-
-```txt
-http://127.0.0.1:8000
-```
-
-Probar un endpoint publico:
-
-```bash
-curl http://127.0.0.1:8000/api/provincia
-```
-
-Probar con Postman:
-
-- Metodo: `GET`
-- URL: `http://127.0.0.1:8000/api/provincia`
-- Headers: `Accept: application/json`
-
-Si todo esta bien, debe responder JSON.
-
-## 13. Probar login
+## 6. Probar login
 
 Solo funcionara si la API externa de usuarios esta configurada y levantada.
 
@@ -915,7 +766,7 @@ API externa no disponible:
 }
 ```
 
-## 14. Probar rutas principales
+## 7. Probar rutas principales
 
 Listar rutas disponibles:
 
@@ -948,35 +799,7 @@ Ejemplo con curl:
 curl -H "Accept: application/json" http://127.0.0.1:8000/api/facultad
 ```
 
-## 15. Conectar un frontend
-
-Si existe un frontend Vue u otro cliente, configurar su URL base de API como:
-
-```env
-VITE_API_URL=http://127.0.0.1:8000/api
-```
-
-En esta API, CORS esta configurado para aceptar solicitudes a `api/*` desde cualquier origen durante desarrollo.
-
-Si el frontend corre en:
-
-```txt
-http://localhost:5173
-```
-
-Y la API en:
-
-```txt
-http://127.0.0.1:8000
-```
-
-Las llamadas deben apuntar a:
-
-```txt
-http://127.0.0.1:8000/api/...
-```
-
-## 16. Comandos diarios de desarrollo
+## 8. Comandos utiles para esta API
 
 Levantar API:
 
@@ -1014,7 +837,7 @@ Reiniciar base de datos con datos:
 php artisan migrate:fresh --seed
 ```
 
-## 17. Validacion final de instalacion
+## 9. Validacion final de instalacion
 
 Antes de decir que la API esta lista, comprobar:
 
@@ -1032,7 +855,7 @@ Antes de decir que la API esta lista, comprobar:
 12. Si se va a usar login, `USERS_API_URL` apunta a una API de usuarios funcionando.
 13. `POST /api/login` responde correctamente con usuarios validos.
 
-## 18. Errores comunes y soluciones
+## 10. Errores comunes y soluciones
 
 ### Error: `No application encryption key has been specified`
 
@@ -1171,39 +994,7 @@ curl http://127.0.0.1:8001/api/users
 
 Si esa URL no responde, levantar la API de usuarios o cambiar `USERS_API_URL`.
 
-### Error: el frontend no conecta con la API
-
-Revisar:
-
-1. La API esta levantada con `php artisan serve`.
-2. El frontend apunta a `http://127.0.0.1:8000/api`.
-3. Se esta usando `Accept: application/json`.
-4. No hay error de puerto ocupado.
-5. CORS esta activo para `api/*`.
-
-## 19. Instalacion limpia resumida
-
-Estos son los comandos principales para una instalacion nueva:
-
-```bash
-composer install
-cp .env.example .env
-php artisan key:generate
-php artisan migrate
-php artisan db:seed
-php artisan storage:link
-php artisan optimize:clear
-php artisan serve
-```
-
-Si la base de datos es nueva y se quiere cargar todo desde cero:
-
-```bash
-php artisan migrate:fresh --seed
-php artisan serve
-```
-
-## 20. Recomendacion para demostraciones
+## 11. Recomendacion para demostraciones
 
 Para que la API funcione bien en cualquier laptop durante una presentacion:
 
@@ -1238,13 +1029,3 @@ Y probar:
 ```txt
 http://127.0.0.1:8002/api/provincia
 ```
-
-## 21. Comando de prueba final
-
-Con el servidor levantado:
-
-```bash
-curl -H "Accept: application/json" http://127.0.0.1:8000/api/provincia
-```
-
-Si responde JSON, la API esta corriendo correctamente.
